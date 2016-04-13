@@ -9,7 +9,14 @@ __author__ = 'Ulises  Guzman'
 __author__ = 'Joseph Javadi'
 date = '04/07/2016'
 
-
+# this is only a temporary solution for the working directories.
+PR_PATH = 'C:\Users\ulisesdario\CAD-to-esri-3D-Network'
+# reformatting path strings to have forward slashes, otherwise AutoCAD fails.
+PR_PATH = PR_PATH.replace('\\', '/') + '/'
+print(PR_PATH)
+SCRATCH_PATH = 'C:\Users\ulisesdario\Desktop\scratch'
+SCRATCH_PATH = SCRATCH_PATH.replace('\\', '/') + '/'
+print(SCRATCH_PATH)
 """
 --------------------------------------------------------------------------------
 SCRIPT DESCRIPTION:
@@ -60,10 +67,35 @@ def file_collector():
     return
 
 
-def cad_to_fc():
+def cad_to_fc(floor_plan, layer_on):
     """
     """
     # Ulises
+    # opening the last AutoCAD instance according to the windows registry.
+    acad = client.Dispatch("AutoCAD.Application")
+    acad.Visible = True
+    doc = acad.ActiveDocument
+    doc.SendCommand("SDI 1\n")
+    doc.SendCommand('(command "_.OPEN" "%s")\n' % floor_plan)
+    # turning off all the layers in the drawing.
+    doc.SendCommand('(command "-layer" "off" "*" "Y" "")\n')
+    # turning on the specified layer.
+    doc.SendCommand('(command "-layer" "on" "%s" "")\n' % layer_on)
+    # thawing the specified layer.
+    doc.SendCommand('(command "-layer" "thaw" "%s" "")\n' % layer_on)
+    # switching to Model view.
+    doc.SendCommand("Model\n")
+    mp = '-mapexport'
+    # setting the parameters for the MAPEXPORT AutoCADMap command.
+    out_name = SCRATCH_PATH + os.path.basename(floor_plan)[:-4] + '.shp'
+    ex_set = PR_PATH + 'mapexportsettings.epf'
+    pr = 'Proceed'
+    # MAPEXPORT AutoCAD Map string command.
+    ex_command = '(command "{0}" "SHP" "{1}" "Y" "{2}" "S" "L" "All" "*" "*"' \
+                 ' "No" "{3}")'.format(mp, out_name, ex_set, pr)
+    print(out_name)
+    print(ex_command)
+    doc.SendCommand("'%s'\n" % ex_command)
     return
 
 
@@ -72,3 +104,6 @@ def topology_checks():
     """
     # Ulises
     return
+
+cad_to_fc(
+    'C:/Users/ulisesdario/Downloads/S-241E-01-DWG-BAS.dwg', 'A-SPAC-PPLN-AREA')
