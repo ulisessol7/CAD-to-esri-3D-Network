@@ -76,7 +76,8 @@ def cad_to_fc(floor_plan, layer_on):
     acad.Visible = True
     doc = acad.ActiveDocument
     doc.SendCommand("SDI 1\n")
-    doc.SendCommand('(command "_.OPEN" "%s")\n' % floor_plan)
+    doc.SendCommand('(command "_.OPEN" "%s" "Y")\n' % floor_plan)
+    doc.SendCommand("(acad-push-dbmod)\n")
     # turning off all the layers in the drawing.
     doc.SendCommand('(command "-layer" "off" "*" "Y" "")\n')
     # turning on the specified layer.
@@ -91,11 +92,12 @@ def cad_to_fc(floor_plan, layer_on):
     ex_set = PR_PATH + 'mapexportsettings.epf'
     pr = 'Proceed'
     # MAPEXPORT AutoCAD Map string command.
-    ex_command = '(command "{0}" "SHP" "{1}" "Y" "{2}" "S" "L" "All" "*" "*"' \
-                 ' "No" "{3}")'.format(mp, out_name, ex_set, pr)
+    ex_command = '(command "{0}" "SHP" "{1}" "Y" "{2}"' \
+                 ' "{3}")'.format(mp, out_name, ex_set, pr)
+    doc.SendCommand('%s\n' % ex_command)
+    doc.SendCommand("(acad-pop-dbmod)\n")
     print(out_name)
     print(ex_command)
-    doc.SendCommand("'%s'\n" % ex_command)
     return
 
 
