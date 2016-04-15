@@ -1,20 +1,30 @@
 # -*- coding: utf-8 -*-
-"""CAD to esri 3D Network"""
+"""
+CAD to esri 3D Network:
+--------------------------------------------------------------------------------
+This script...
+--------------------------------------------------------------------------------
+"""
 from __future__ import print_function
 import os
 import glob
+import re
+import tempfile
 from win32com import client
 
 __author__ = 'Ulises  Guzman'
-__author__ = 'Joseph Javadi'
-date = '04/07/2016'
+__date__ = '04/07/2016'
 
 # this is only a temporary solution for the working directories.
 PR_PATH = 'C:\Users\ulisesdario\CAD-to-esri-3D-Network'
 # reformatting path strings to have forward slashes, otherwise AutoCAD fails.
 PR_PATH = PR_PATH.replace('\\', '/') + '/'
 print(PR_PATH)
-SCRATCH_PATH = 'C:\Users\ulisesdario\Desktop\scratch'
+# SCRATCH_PATH = 'C:\Users\ulisesdario\Desktop\scratch'
+# SCRATCH_PATH = SCRATCH_PATH.replace('\\', '/') + '/'
+# exploring the possibility of creating a temporary directory for geoprocessing
+# this solution is multiplatform.
+SCRATCH_PATH = tempfile.mkdtemp()
 SCRATCH_PATH = SCRATCH_PATH.replace('\\', '/') + '/'
 print(SCRATCH_PATH)
 """
@@ -62,50 +72,66 @@ def file_collector():
     keys and the dwg files as values, if you have questions about this please
     let me know.
     """
-    # Joseph
     # this function should return a python dictionary
     return
 
 
-def cad_to_fc(floor_plan, layer_on):
+def cad_layer_name_simplifier(layername):
+    """This function simplifies CAD layers' names by extracting their rightmost
+    word characters, this logic follows the AIA CAD Layer Guidelines.
+
+    Args:
+    layername (str) = A string representation of the CAD layer name.
+
+    Returns:
+    simple_layer_name (str) = A 'simplified' version of the CAD layer name.
+
+    Examples:
+    >>> cad_layer_name_simplifier('A-SPAC-PPLN-AREA')
+    AREA
     """
+    match = re.search('\w+$', layername)
+    simple_layer_name = match.group()
+    return simple_layer_name
+
+
+def autocadmap_to_shp(floor_plan, layer_on):
     """
-    # Ulises
+    ...
+    """
     # opening the last AutoCAD instance according to the windows registry.
     acad = client.Dispatch("AutoCAD.Application")
     acad.Visible = True
     doc = acad.ActiveDocument
     doc.SendCommand("SDI 1\n")
     doc.SendCommand('(command "_.OPEN" "%s" "Y")\n' % floor_plan)
-    doc.SendCommand("(acad-push-dbmod)\n")
+    doc.SendCommand("(ACAD-PUSH-DBMOD)\n")
     # turning off all the layers in the drawing.
-    doc.SendCommand('(command "-layer" "off" "*" "Y" "")\n')
+    doc.SendCommand('(command "-LAYER" "OFF" "*" "Y" "")\n')
     # turning on the specified layer.
-    doc.SendCommand('(command "-layer" "on" "%s" "")\n' % layer_on)
+    doc.SendCommand('(command "-LAYER" "ON" "%s" "")\n' % layer_on)
     # thawing the specified layer.
-    doc.SendCommand('(command "-layer" "thaw" "%s" "")\n' % layer_on)
+    doc.SendCommand('(command "-LAYER" "THAW" "%s" "")\n' % layer_on)
     # switching to Model view.
-    doc.SendCommand("Model\n")
-    mp = '-mapexport'
+    doc.SendCommand("MODEL\n")
+    sl_name = cad_layer_name_simplifier(layer_on)
+    mp = '-MAPEXPORT'
     # setting the parameters for the MAPEXPORT AutoCADMap command.
-    out_name = SCRATCH_PATH + os.path.basename(floor_plan)[:-4] + '.shp'
+    out_name = '{0}{1}-{2}.shp'.format(SCRATCH_PATH,
+                                       os.path.basename(floor_plan)[:-4],
+                                       sl_name)
     ex_set = PR_PATH + 'mapexportsettings.epf'
-    pr = 'Proceed'
-    # MAPEXPORT AutoCAD Map string command.
+    pr = 'PROCEED'
     ex_command = '(command "{0}" "SHP" "{1}" "Y" "{2}"' \
                  ' "{3}")'.format(mp, out_name, ex_set, pr)
     doc.SendCommand('%s\n' % ex_command)
-    doc.SendCommand("(acad-pop-dbmod)\n")
-    print(out_name)
-    print(ex_command)
+    doc.SendCommand("(ACAD-POP-DBMOD)\n")
+    # print(out_name)
+    # print(ex_command)
     return
 
-
-def topology_checks():
-    """
-    """
-    # Ulises
-    return
-
-cad_to_fc(
+# tests
+autocadmap_to_shp(
     'C:/Users/ulisesdario/Downloads/S-241E-01-DWG-BAS.dwg', 'A-SPAC-PPLN-AREA')
+
+# cad_layer_name_simplifier('A-SPAC-PPLN-AREA')
