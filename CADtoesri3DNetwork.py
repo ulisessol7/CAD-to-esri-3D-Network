@@ -10,33 +10,22 @@ import os
 import glob
 import re
 import tempfile
+import inspect
 from win32com import client
 
 __author__ = 'Ulises  Guzman'
 __date__ = '04/07/2016'
 
-# this is only a temporary solution for the working directories.
-PR_PATH = 'C:\Users\ulisesdario\CAD-to-esri-3D-Network'
+
+PR_PATH = os.getcwd()
 # reformatting path strings to have forward slashes, otherwise AutoCAD fails.
 PR_PATH = PR_PATH.replace('\\', '/') + '/'
 print(PR_PATH)
-# SCRATCH_PATH = 'C:\Users\ulisesdario\Desktop\scratch'
-# SCRATCH_PATH = SCRATCH_PATH.replace('\\', '/') + '/'
 # exploring the possibility of creating a temporary directory for geoprocessing
 # this solution is multiplatform.
 SCRATCH_PATH = tempfile.mkdtemp()
 SCRATCH_PATH = SCRATCH_PATH.replace('\\', '/') + '/'
-print(SCRATCH_PATH)
-"""
---------------------------------------------------------------------------------
-SCRIPT DESCRIPTION:
-
-
-
-
-
---------------------------------------------------------------------------------
-"""
+# print(SCRATCH_PATH)
 
 
 def path_retriever(ws):
@@ -98,7 +87,22 @@ def cad_layer_name_simplifier(layername):
 def autocadmap_to_shp(floor_plan, layer_on):
     """
     ...
+    Args:
+    floor_plan (str) = ...
+    layer_on (str) = ...
+
+    Returns:
+    A shapefile file based on the provided floor plan. This will only contain
+    the geometry that is present in the layer represented by the layer_on
+    parameter.
+
+    Examples:
+    >>> autocadmap_to_shp(
+#     'C:/Users/ulisesdario/S-241E-01-DWG-BAS.dwg', 'A-SPAC-PPLN-AREA')
+    ...
     """
+    # getting the name of the function programatically.
+    print ('Executing {}... '.format(inspect.currentframe().f_code.co_name))
     # opening the last AutoCAD instance according to the windows registry.
     acad = client.Dispatch("AutoCAD.Application")
     acad.Visible = True
@@ -126,12 +130,42 @@ def autocadmap_to_shp(floor_plan, layer_on):
                  ' "{3}")'.format(mp, out_name, ex_set, pr)
     doc.SendCommand('%s\n' % ex_command)
     doc.SendCommand("(ACAD-POP-DBMOD)\n")
-    # print(out_name)
-    # print(ex_command)
+    print('{} has been successfully created'.format(out_name))
     return
 
+
+def shp_files_reader(location):
+    """Returns a list of existing shp files in the provided location. This
+    function was developed as an alternative to ListFeatureClasses(), the major
+    advantage here is that this function is non ArcPy dependent.
+    Args:
+    location (str) = A string representation of the directory location.
+
+    Returns:
+    shapefiles (list) = A list that contains all the shapefiles in the provided
+    directory.
+
+    Examples:
+    >>> shp_files_reader('C:\Users\ulisesdario\Desktop\scratch')
+    Executing shp_files_reader...
+    2 shapefiles were found in scratch:
+    ['thiessen.shp', 'simplify.shp']
+    """
+    # getting the name of the function programatically.
+    print ('Executing {}... '.format(inspect.currentframe().f_code.co_name))
+    original_workspace = os.getcwd()
+    os.chdir(location)
+    shapefiles = glob.glob("*.shp")
+    print ('{} shapefiles were found in {}: '.format(
+        (len(shapefiles)), os.path.basename(location)))
+    print (shapefiles)
+    os.chdir(original_workspace)
+    return shapefiles
+
+
 # tests
-autocadmap_to_shp(
-    'C:/Users/ulisesdario/Downloads/S-241E-01-DWG-BAS.dwg', 'A-SPAC-PPLN-AREA')
+# autocadmap_to_shp(
+#     'C:/Users/ulisesdario/Downloads/S-241E-01-DWG-BAS.dwg', 'A-SPAC-PPLN-AREA')
 
 # cad_layer_name_simplifier('A-SPAC-PPLN-AREA')
+shp_files_reader('C:\Users\ulisesdario\Desktop\scratch')
