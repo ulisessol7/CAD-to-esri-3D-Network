@@ -1,21 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-CAD to esri 3D Network:
+Name:       CADtoesri3DNetwork.py
+Purpose:    ...
+Author:     Ulises  Guzman
+Created:    04/07/2016
+Copyright:   (c) 
+ArcGIS Version:   10.3.1
+Python Version:   2.7x
 --------------------------------------------------------------------------------
 This script...
 --------------------------------------------------------------------------------
 """
 from __future__ import print_function
 import os
+from os import path
 import glob
 import re
 import tempfile
 import inspect
+from pathlib import Path
 from win32com import client
-
-__author__ = 'Ulises  Guzman'
-__date__ = '04/07/2016'
-
+import arcpy
+from arcpy import env
 
 PR_PATH = os.getcwd()
 # reformatting path strings to have forward slashes, otherwise AutoCAD fails.
@@ -25,7 +31,9 @@ print(PR_PATH)
 # this solution is multiplatform.
 SCRATCH_PATH = tempfile.mkdtemp()
 SCRATCH_PATH = SCRATCH_PATH.replace('\\', '/') + '/'
-# print(SCRATCH_PATH)
+# env.scratchWorkspace = 'C:\Users\ulisesdario\Documents\ArcGIS'
+print(SCRATCH_PATH)
+temp_gdb = env.scratchGDB
 
 
 def path_retriever(ws):
@@ -84,12 +92,17 @@ def cad_layer_name_simplifier(layername):
     return simple_layer_name
 
 
-def autocadmap_to_shp(floor_plan, layer_on):
-    """
-    ...
+def autocadmap_to_shp(floor_plan, outloc, layer_on):
+    """This function transforms AutoCAD Map files into shapefiles, this function
+    was developed as an alternative to the current workflows proposed by esri:
+    http://desktop.arcgis.com/en/arcmap/10.3/tools/conversion-toolbox/
+    cad-to-geodatabase.html. The main advantage is that this function can import
+    spatial attributes and not only geometry, this is especially important
+    on work environments that are heavily dependent on Munsys Ai:
+    http://www.openspatial.com/products/munsys-ai
     Args:
-    floor_plan (str) = ...
-    layer_on (str) = ...
+    floor_plan (str) = The dwg file full path.
+    layer_on (str) = The AutoCAD layer that is meant to be set 'ON'.
 
     Returns:
     A shapefile file based on the provided floor plan. This will only contain
@@ -98,11 +111,17 @@ def autocadmap_to_shp(floor_plan, layer_on):
 
     Examples:
     >>> autocadmap_to_shp(
-#     'C:/Users/ulisesdario/S-241E-01-DWG-BAS.dwg', 'A-SPAC-PPLN-AREA')
-    ...
+    'C:/Users/ulisesdario/S-241E-01-DWG-BAS.dwg', 'C:/Users/ulisesdario',
+    'A-SPAC-PPLN-AREA')
+    Executing autocadmap_to_shp...
+    C:/Users/ulisesdario/S-241E-01-DWG-BAS-AREA.shp has been successfully
+    created
+    
     """
     # getting the name of the function programatically.
     print ('Executing {}... '.format(inspect.currentframe().f_code.co_name))
+    # formatting outloc string to be compatible with AutoCAD.
+    outloc = outloc.replace('\\', '/') + '/'
     # opening the last AutoCAD instance according to the windows registry.
     acad = client.Dispatch("AutoCAD.Application")
     acad.Visible = True
@@ -121,7 +140,7 @@ def autocadmap_to_shp(floor_plan, layer_on):
     sl_name = cad_layer_name_simplifier(layer_on)
     mp = '-MAPEXPORT'
     # setting the parameters for the MAPEXPORT AutoCADMap command.
-    out_name = '{0}{1}-{2}.shp'.format(SCRATCH_PATH,
+    out_name = '{0}{1}-{2}.shp'.format(outloc,
                                        os.path.basename(floor_plan)[:-4],
                                        sl_name)
     ex_set = PR_PATH + 'mapexportsettings.epf'
@@ -130,6 +149,8 @@ def autocadmap_to_shp(floor_plan, layer_on):
                  ' "{3}")'.format(mp, out_name, ex_set, pr)
     doc.SendCommand('%s\n' % ex_command)
     doc.SendCommand("(ACAD-POP-DBMOD)\n")
+    # doc.SendCommand("QQUIT\n")
+    doc.Close(True)
     print('{} has been successfully created'.format(out_name))
     return
 
@@ -142,30 +163,85 @@ def shp_files_reader(location):
     location (str) = A string representation of the directory location.
 
     Returns:
-    shapefiles (list) = A list that contains all the shapefiles in the provided
-    directory.
+    shapefiles (list) = A list that contains all the shapefiles' file names
+    in the provided directory.
+    shapefiles_full_path (list) = A list that contains all the shapefiles' real
+    paths in the provided directory.
 
     Examples:
     >>> shp_files_reader('C:\Users\ulisesdario\Desktop\scratch')
     Executing shp_files_reader...
     2 shapefiles were found in scratch:
     ['thiessen.shp', 'simplify.shp']
+    ['C:\\Users\\ulisesdario\\Desktop\\scratch\\thiessen.shp',
+    'C:\\Users\\ulisesdario\\Desktop\\scratch\\simplify.shp']
     """
     # getting the name of the function programatically.
     print ('Executing {}... '.format(inspect.currentframe().f_code.co_name))
     original_workspace = os.getcwd()
     os.chdir(location)
     shapefiles = glob.glob("*.shp")
+    shapefiles_full_path = [os.path.join(location,shp) for shp in shapefiles]
     print ('{} shapefiles were found in {}: '.format(
         (len(shapefiles)), os.path.basename(location)))
     print (shapefiles)
     os.chdir(original_workspace)
-    return shapefiles
+    return shapefiles, shapefiles_full_path
 
+
+def shp_to_fc(shapefiles, gdblocation):
+    """This function invokes the arcpy.FeatureClassToGeodatabase_conversion
+    tool in each item in the shapefiles' list.The gdblocation argument serves
+    as the output for the aforementioned tool.
+    Args:
+    shapefiles (list) = A list that contains all the shapefiles' real
+    paths in the provided directory.
+    gdblocation (str) = A string representation of the gdb location.
+
+    Returns:
+    A feature class file based on the provided shapefiles argument.
+    
+    Examples:
+    >>>  s = ['C:\\Users\\ulisesdario\\Desktop\\scratch\\thiessen.shp',
+    'C:\\Users\\ulisesdario\\Desktop\\scratch\\simplify.shp']
+    >>> shp_to_fc(s, 'C:\Users\ulisesdario\Documents\ArcGIS\Default.gdb')
+    Executing shp_to_fc...
+    C:\Users\ulisesdario\Desktop\scratch\thiessen.shp Successfully
+    converted: C:\Users\ulisesdario\Documents\ArcGIS\Default.gdb\thiessen
+    ...
+    2 feature classes were created in Default.gdb: 
+    """
+    try:
+        # getting the name of the function programatically.
+        print ('Executing {}... '.format(
+            inspect.currentframe().f_code.co_name))
+        outLocation = gdblocation
+        for shp in shapefiles:
+            arcpy.FeatureClassToGeodatabase_conversion(shp, outLocation)
+        print ('{} feature classes were created in {}: '.format(
+            (len(shapefiles)), os.path.basename(gdblocation)))
+        print (shapefiles)
+    except arcpy.ExecuteError:
+        print (arcpy.GetMessages(2))
+    except Exception as e:
+        print (e.args[0])
 
 # tests
-# autocadmap_to_shp(
-#     'C:/Users/ulisesdario/Downloads/S-241E-01-DWG-BAS.dwg', 'A-SPAC-PPLN-AREA')
-
+autocadmap_to_shp(
+    'C:/Users/ulisesdario/Downloads/S-241E-01-DWG-BAS.dwg',
+    'C:\Users\ulisesdario\Desktop\scratch','A-SPAC-PPLN-AREA')
 # cad_layer_name_simplifier('A-SPAC-PPLN-AREA')
-shp_files_reader('C:\Users\ulisesdario\Desktop\scratch')
+# shp_files_reader('C:\Users\ulisesdario\Desktop\scratch')
+# env.workspace = 'C:\Users\ulisesdario\Desktop\scratch'
+# environments = arcpy.ListEnvironments()
+# for environment in environments:
+#     envSetting = eval("arcpy.env." + environment)
+#     print ("%-30s: %s" % (environment, envSetting))
+# arcpy.ResetEnvironments()
+# environments = arcpy.ListEnvironments()
+# for environment in environments:
+#     envSetting = eval("arcpy.env." + environment)
+#     print ("%-30s: %s" % (environment, envSetting))
+
+# s = shp_files_reader('C:\Users\ulisesdario\Desktop\scratch')[1]
+# shp_to_fc(s, 'C:\Users\ulisesdario\Documents\ArcGIS\Default.gdb')
