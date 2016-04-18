@@ -4,8 +4,9 @@ Name:       CADtoesri3DNetwork.py
 Purpose:    ...
 Author:     Ulises  Guzman
 Created:    04/07/2016
-Copyright:   (c) 
+Copyright:   (c)
 ArcGIS Version:   10.3.1
+AutoCAD Version:
 Python Version:   2.7x
 --------------------------------------------------------------------------------
 This script...
@@ -13,15 +14,14 @@ This script...
 """
 from __future__ import print_function
 import os
-from os import path
 import glob
 import re
 import tempfile
 import inspect
-from pathlib import Path
 from win32com import client
 import arcpy
 from arcpy import env
+
 
 PR_PATH = os.getcwd()
 # reformatting path strings to have forward slashes, otherwise AutoCAD fails.
@@ -96,9 +96,9 @@ def autocadmap_to_shp(floor_plan, outloc, layer_on):
     """This function transforms AutoCAD Map files into shapefiles, this function
     was developed as an alternative to the current workflows proposed by esri:
     http://desktop.arcgis.com/en/arcmap/10.3/tools/conversion-toolbox/
-    cad-to-geodatabase.html. The main advantage is that this function can import
-    spatial attributes and not only geometry, this is especially important
-    on work environments that are heavily dependent on Munsys Ai:
+    cad-to-geodatabase.html. The main advantage is that this function can
+    import spatial attributes and not only geometry, this is especially
+    important on work environments that are heavily dependent on Munsys Ai:
     http://www.openspatial.com/products/munsys-ai
     Args:
     floor_plan (str) = The dwg file full path.
@@ -116,7 +116,6 @@ def autocadmap_to_shp(floor_plan, outloc, layer_on):
     Executing autocadmap_to_shp...
     C:/Users/ulisesdario/S-241E-01-DWG-BAS-AREA.shp has been successfully
     created
-    
     """
     # getting the name of the function programatically.
     print ('Executing {}... '.format(inspect.currentframe().f_code.co_name))
@@ -181,7 +180,7 @@ def shp_files_reader(location):
     original_workspace = os.getcwd()
     os.chdir(location)
     shapefiles = glob.glob("*.shp")
-    shapefiles_full_path = [os.path.join(location,shp) for shp in shapefiles]
+    shapefiles_full_path = [os.path.join(location, shp) for shp in shapefiles]
     print ('{} shapefiles were found in {}: '.format(
         (len(shapefiles)), os.path.basename(location)))
     print (shapefiles)
@@ -200,7 +199,7 @@ def shp_to_fc(shapefiles, gdblocation):
 
     Returns:
     A feature class file based on the provided shapefiles argument.
-    
+
     Examples:
     >>>  s = ['C:\\Users\\ulisesdario\\Desktop\\scratch\\thiessen.shp',
     'C:\\Users\\ulisesdario\\Desktop\\scratch\\simplify.shp']
@@ -209,7 +208,7 @@ def shp_to_fc(shapefiles, gdblocation):
     C:\Users\ulisesdario\Desktop\scratch\thiessen.shp Successfully
     converted: C:\Users\ulisesdario\Documents\ArcGIS\Default.gdb\thiessen
     ...
-    2 feature classes were created in Default.gdb: 
+    2 feature classes were created in Default.gdb:
     """
     try:
         # getting the name of the function programatically.
@@ -226,10 +225,18 @@ def shp_to_fc(shapefiles, gdblocation):
     except Exception as e:
         print (e.args[0])
 
+
+def skeletonizer():
+    """Medial Axis
+    """
+    skeleton = None
+    return skeleton
+
+
 # tests
-autocadmap_to_shp(
-    'C:/Users/ulisesdario/Downloads/S-241E-01-DWG-BAS.dwg',
-    'C:\Users\ulisesdario\Desktop\scratch','A-SPAC-PPLN-AREA')
+# autocadmap_to_shp(
+#     'C:/Users/ulisesdario/Downloads/S-241E-01-DWG-BAS.dwg',
+#     'C:\Users\ulisesdario\Desktop\scratch', 'A-SPAC-PPLN-AREA')
 # cad_layer_name_simplifier('A-SPAC-PPLN-AREA')
 # shp_files_reader('C:\Users\ulisesdario\Desktop\scratch')
 # env.workspace = 'C:\Users\ulisesdario\Desktop\scratch'
@@ -245,3 +252,9 @@ autocadmap_to_shp(
 
 # s = shp_files_reader('C:\Users\ulisesdario\Desktop\scratch')[1]
 # shp_to_fc(s, 'C:\Users\ulisesdario\Documents\ArcGIS\Default.gdb')
+
+
+mxd = arcpy.mapping.MapDocument(
+    'C:\Users\ulisesdario\CAD-to-esri-3D-Network\scratch.mxd')
+mxd.author = "Ulises Guzman"
+mxd.save()
