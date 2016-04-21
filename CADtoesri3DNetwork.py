@@ -18,21 +18,22 @@ import glob
 import re
 import tempfile
 import inspect
-from win32com import client
+# from win32com import client
 import arcpy
+import arcpy.na
 from arcpy import env
 
 
 PR_PATH = os.getcwd()
 # reformatting path strings to have forward slashes, otherwise AutoCAD fails.
 PR_PATH = PR_PATH.replace('\\', '/') + '/'
-print(PR_PATH)
+# print(PR_PATH)
 # exploring the possibility of creating a temporary directory for geoprocessing
 # this solution is multiplatform.
 SCRATCH_PATH = tempfile.mkdtemp()
 SCRATCH_PATH = SCRATCH_PATH.replace('\\', '/') + '/'
 # env.scratchWorkspace = 'C:\Users\ulisesdario\Documents\ArcGIS'
-print(SCRATCH_PATH)
+# print(SCRATCH_PATH)
 temp_gdb = env.scratchGDB
 
 
@@ -232,7 +233,26 @@ def skeletonizer():
     skeleton = None
     return skeleton
 
+def build_network(workspace):
+    """
+    """
+    # env.workspace = workspace
+    # this could also be the scratch gdb.
+    env.workspace = 'G:/Sublime/PROJECTS/network_scratch.gdb'
+    environments = arcpy.ListEnvironments()
+    # esri code, for debugging purposes
+    for environment in environments:
+        # As the environment is passed as a variable, use Python's getattr 
+        #   to evaluate the environment's value
+        #
+        env_value = getattr(arcpy.env, environment)
 
+        # Format and print each environment and its current setting
+        #
+        print("{0:<30}: {1}".format(environment, env_value))
+    return
+
+build_network('dummy')
 # tests
 # autocadmap_to_shp(
 #     'C:/Users/ulisesdario/Downloads/S-241E-01-DWG-BAS.dwg',
@@ -254,7 +274,9 @@ def skeletonizer():
 # shp_to_fc(s, 'C:\Users\ulisesdario\Documents\ArcGIS\Default.gdb')
 
 
-mxd = arcpy.mapping.MapDocument(
-    'C:\Users\ulisesdario\CAD-to-esri-3D-Network\scratch.mxd')
-mxd.author = "Ulises Guzman"
-mxd.save()
+# mxd = arcpy.mapping.MapDocument(
+#     'C:\Users\ulisesdario\CAD-to-esri-3D-Network\scratch.mxd')
+# mxd.author = "Ulises Guzman"
+# mxd.save()
+
+
