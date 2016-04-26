@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 Name:       CADtoesri3DNetwork.py
-Purpose:    ...
 Author:     Ulises  Guzman
 Created:    04/07/2016
 Copyright:   (c)
 ArcGIS Version:   10.3.1
-AutoCAD Version:
-Python Version:   2.7x
+AutoCAD Version:  20.1
+Python Version:   2.7.8
 --------------------------------------------------------------------------------
 This script...
 --------------------------------------------------------------------------------
