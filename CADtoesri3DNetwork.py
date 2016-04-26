@@ -18,7 +18,7 @@ import glob
 import re
 import tempfile
 import inspect
-# from win32com import client
+from win32com import client
 import arcpy
 import arcpy.na
 from arcpy import env
@@ -74,12 +74,12 @@ def file_collector():
     return
 
 
-def cad_layer_name_simplifier(layername):
+def cad_layer_name_simplifier(layer_name):
     """This function simplifies CAD layers' names by extracting their rightmost
     word characters, this logic follows the AIA CAD Layer Guidelines.
 
     Args:
-    layername (str) = A string representation of the CAD layer name.
+    layer_name (str) = A string representation of the CAD layer name.
 
     Returns:
     simple_layer_name (str) = A 'simplified' version of the CAD layer name.
@@ -88,12 +88,12 @@ def cad_layer_name_simplifier(layername):
     >>> cad_layer_name_simplifier('A-SPAC-PPLN-AREA')
     AREA
     """
-    match = re.search('\w+$', layername)
+    match = re.search('\w+$', layer_name)
     simple_layer_name = match.group()
     return simple_layer_name
 
 
-def autocadmap_to_shp(floor_plan, outloc, layer_on):
+def autocadmap_to_shp(floor_plan, out_loc, layer_on):
     """This function transforms AutoCAD Map files into shapefiles, this function
     was developed as an alternative to the current workflows proposed by esri:
     http://desktop.arcgis.com/en/arcmap/10.3/tools/conversion-toolbox/
@@ -120,8 +120,8 @@ def autocadmap_to_shp(floor_plan, outloc, layer_on):
     """
     # getting the name of the function programatically.
     print ('Executing {}... '.format(inspect.currentframe().f_code.co_name))
-    # formatting outloc string to be compatible with AutoCAD.
-    outloc = outloc.replace('\\', '/') + '/'
+    # formatting out_loc string to be compatible with AutoCAD.
+    out_loc = out_loc.replace('\\', '/') + '/'
     # opening the last AutoCAD instance according to the windows registry.
     acad = client.Dispatch("AutoCAD.Application")
     acad.Visible = True
@@ -140,7 +140,7 @@ def autocadmap_to_shp(floor_plan, outloc, layer_on):
     sl_name = cad_layer_name_simplifier(layer_on)
     mp = '-MAPEXPORT'
     # setting the parameters for the MAPEXPORT AutoCADMap command.
-    out_name = '{0}{1}-{2}.shp'.format(outloc,
+    out_name = '{0}{1}-{2}.shp'.format(out_loc,
                                        os.path.basename(floor_plan)[:-4],
                                        sl_name)
     ex_set = PR_PATH + 'mapexportsettings.epf'
@@ -189,14 +189,14 @@ def shp_files_reader(location):
     return shapefiles, shapefiles_full_path
 
 
-def shp_to_fc(shapefiles, gdblocation):
+def shp_to_fc(shapefiles, out_gdb_location='in_memory'):
     """This function invokes the arcpy.FeatureClassToGeodatabase_conversion
-    tool in each item in the shapefiles' list.The gdblocation argument serves
-    as the output for the aforementioned tool.
+    tool in each item in the shapefiles' list.The out_gdb_location argument
+    serves as the output for the aforementioned tool.
     Args:
     shapefiles (list) = A list that contains all the shapefiles' real
     paths in the provided directory.
-    gdblocation (str) = A string representation of the gdb location.
+    out_gdb_location (str) = A string representation of the gdb location.
 
     Returns:
     A feature class file based on the provided shapefiles argument.
@@ -215,44 +215,58 @@ def shp_to_fc(shapefiles, gdblocation):
         # getting the name of the function programatically.
         print ('Executing {}... '.format(
             inspect.currentframe().f_code.co_name))
-        outLocation = gdblocation
         for shp in shapefiles:
-            arcpy.FeatureClassToGeodatabase_conversion(shp, outLocation)
+            arcpy.FeatureClassToGeodatabase_conversion(shp, out_gdb_location)
         print ('{} feature classes were created in {}: '.format(
-            (len(shapefiles)), os.path.basename(gdblocation)))
+            (len(shapefiles)), os.path.basename(out_gdb_location)))
         print (shapefiles)
     except arcpy.ExecuteError:
         print (arcpy.GetMessages(2))
-    except Exception as e:
-        print (e.args[0])
 
 
-def skeletonizer():
+def skeletonizer(floor_plans_fc, out_location, workspace=env.workspace):
     """Medial Axis
     """
-    skeleton = None
-    return skeleton
+    try:
+        # getting the name of the function programatically.
+        print ('Executing {}... '.format(
+            inspect.currentframe().f_code.co_name))
+        # string manipulation
+        skeleton_name = [floor_plans_fc[:] for floor_plan in floor_plans_fc]
+        print(skeleton_name)
+        # logic to create skeletons as feature classes
 
-def build_network(workspace):
+    except arcpy.ExecuteError:
+        print (arcpy.GetMessages(2))
+
+
+def build_network(egdb, feature_dataset, feature_type):
+    """It keeps the master network up to date by re-building its source
+    features.The master network and its source features will be assumed to live
+    in an enterprise geodatabase created on PostgreSQL 9.3.
     """
-    """
-    # env.workspace = workspace
-    # this could also be the scratch gdb.
-    env.workspace = 'G:/Sublime/PROJECTS/network_scratch.gdb'
-    environments = arcpy.ListEnvironments()
+    # 'Database Connections' points to the default location
+    network_ws = 'Database Connections\\{}\\{}'.format(egdb, feature_dataset)
+    env.workspace = network_ws
+    print(network_ws)
+    fc_list = arcpy.ListFeatureClasses('*', '%s' % feature_type)
+    print(fc_list)
+
     # esri code, for debugging purposes
-    for environment in environments:
-        # As the environment is passed as a variable, use Python's getattr 
-        #   to evaluate the environment's value
-        #
-        env_value = getattr(arcpy.env, environment)
+    # for environment in environments:
+    # As the environment is passed as a variable, use Python's getattr
+    # to evaluate the environment's value
+    #     #
+    #     env_value = getattr(arcpy.env, environment)
 
-        # Format and print each environment and its current setting
-        #
-        print("{0:<30}: {1}".format(environment, env_value))
+    # Format and print each environment and its current setting
+    #     #
+    #     print("{0:<30}: {1}".format(environment, env_value))
     return
 
-build_network('dummy')
+build_network(
+    'master_network.sde', 'network_scratch.ulisessol7.CU_Boulder_Networks',
+    'POLYLINE')
 # tests
 # autocadmap_to_shp(
 #     'C:/Users/ulisesdario/Downloads/S-241E-01-DWG-BAS.dwg',
@@ -278,5 +292,3 @@ build_network('dummy')
 #     'C:\Users\ulisesdario\CAD-to-esri-3D-Network\scratch.mxd')
 # mxd.author = "Ulises Guzman"
 # mxd.save()
-
-
