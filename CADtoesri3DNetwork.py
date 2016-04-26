@@ -21,6 +21,7 @@ from win32com import client
 import arcpy
 import arcpy.na
 from arcpy import env
+import pandas as pd
 
 
 PR_PATH = os.getcwd()
@@ -36,12 +37,13 @@ SCRATCH_PATH = SCRATCH_PATH.replace('\\', '/') + '/'
 temp_gdb = env.scratchGDB
 
 
-def path_retriever(ws):
+def path_retriever(directory_name=os.path.basename(os.getcwd())):
     """ This helper function prompts the user for a folder or a gdb name,
     the string will then be use to construct a valid path string.
 
     Args:
-    ws (string) = The name of the folder or the gdb that contains the data
+    directory_name(string) = The name of the folder or the gdb that contains
+    the data.
 
     Returns:
     path (string) = A string representation of the folder,or geodatabase,
@@ -52,25 +54,72 @@ def path_retriever(ws):
     Please enter a valid path for Guzman_lab3:
     """
     path = raw_input('Please enter a valid path for'
-                     ' %s : ' % ws)
+                     ' %s : ' % directory_name)
     # checking if the information provided by the user is a valid path
-    while not (os.path.exists(path) and path.endswith('%s' % ws)):
-        path = raw_input('Please enter a valid path for the %s: ' % ws)
+    while not (os.path.exists(path) and path.endswith('%s' % directory_name)):
+        path = raw_input(
+            'Please enter a valid path for the %s: ' % directory_name)
     return path
 
+'This needs to be tweak'
+def bldgs_dict():
+    """
+    This function reads the 'qryAllBldgs.xlsx' file and returns
+    a python dictionary in which the keys are the buildings' number
+    and the values are the buildings' code (i.e. {325 : 'MUEN'} ).
+    This allows to rename files either based on building number or
+    building code. The 'qryAllBldgs.xlsx' file was exported from
+    the 'LiveCASP_SpaceDatabase.mdb' access file
+    ('\\Cotterpin\CASPData\Extract\LiveDatabase').
+    """
+    os.chdir(PATH_qryAllBldgs)
+    bldgs = pd.read_excel('qryAllBldgs.xlsx', header=0, index_col=0).to_dict()
+    bldgs = bldgs['BuildingCode']
+    # print BLDGS
+    return bldgs_dict
 
-def file_collector():
+
+def dwg_file_collector(location=os.getcwd()):
     """
-    This function will grab the dwg files from their folders, for our project
-    we will have two folders, one for each building, the naming convention
-    for the folders should be as follows: bldgnumber_bdlgcode (for instance
-    the library's folder should be named: 245_LIBR). I think the best option
-    here would be to create a 'dictionary' that has the buildings numbers as
-    keys and the dwg files as values, if you have questions about this please
-    let me know.
+    ...
+    Args:
+    location (str) = A string representation of the directory location.
+
+    Returns:
+    dwg_bldg_code (dict) = A dictionary that contains  a list of every dwg
+    per building folder.
+    dwg_bldg_number (dict) = A dictionary that contains  a list of every dwg
+    per building folder.
+    in the subfolders.
+
+    Examples:
+    >>> dwg_file_collector('W:\\')
+    Executing dwg_file_collector...
+    1204 dwgs were found in: W:\
     """
-    # this function should return a python dictionary
-    return
+    # getting the name of the function programatically.
+    print ('Executing {}... '.format(inspect.currentframe().f_code.co_name))
+    original_workspace = os.getcwd()
+    os.chdir(location)
+    folders = [p.replace('\\', '') for p in glob.glob('*/')]
+    # so we can report the how many dwgs were found.
+    dwg_files = []
+    dwg_bldg_number = {}
+    for folder in folders:
+        folder_path = ''.join([location, folder])
+        os.chdir(folder_path)
+        folder_dwg_files = glob.glob('*.dwg')
+        # our current dwg naming convention is as follows:
+        # 'bldg_number-floor_number-DWG-drawing_type (i.e.'325-01-DWG-BAS.dwg')
+        # removes 'ROOF' files from the floorplans' list.
+        folder_dwg_files = [dwg for dwg in folder_dwg_files if dwg[-7:] ==
+                            'BAS.dwg' and 'ROOF' not in dwg]
+        dwg_bldg_number[folder] = folder_dwg_files
+        dwg_files += folder_dwg_files
+    os.chdir(original_workspace)
+    print ('{} dwgs were found in: {} '.format(
+        (len(dwg_files)), location))
+    # print(dwg_bldg_number)
 
 
 def cad_layer_name_simplifier(layer_name):
@@ -87,6 +136,8 @@ def cad_layer_name_simplifier(layer_name):
     >>> cad_layer_name_simplifier('A-SPAC-PPLN-AREA')
     AREA
     """
+    # getting the name of the function programatically.
+    print ('Executing {}... '.format(inspect.currentframe().f_code.co_name))
     match = re.search('\w+$', layer_name)
     simple_layer_name = match.group()
     return simple_layer_name
@@ -103,9 +154,10 @@ def autocadmap_to_shp(floor_plan, out_loc, layer_on):
     Args:
     floor_plan (str) = The dwg file full path.
     layer_on (str) = The AutoCAD layer that is meant to be set 'ON'.
+    out_loc (str) = A string representation of the output location.
 
     Returns:
-    A shapefile file based on the provided floor plan. This will only contain
+    A shapefile based on the provided floor plan. This will only contain
     the geometry that is present in the layer represented by the layer_on
     parameter.
 
@@ -154,7 +206,7 @@ def autocadmap_to_shp(floor_plan, out_loc, layer_on):
     return
 
 
-def shp_files_reader(location):
+def shp_files_reader(location=os.getcwd()):
     """Returns a list of existing shp files in the provided location. This
     function was developed as an alternative to ListFeatureClasses(), the major
     advantage here is that this function is non ArcPy dependent.
@@ -263,10 +315,11 @@ def build_network(egdb, feature_dataset, feature_type):
     #     print("{0:<30}: {1}".format(environment, env_value))
     return
 
-build_network(
-    'master_network.sde', 'network_scratch.ulisessol7.CU_Boulder_Networks',
-    'POLYLINE')
+
 # tests
+# build_network(
+#     'master_network.sde', 'network_scratch.ulisessol7.CU_Boulder_Networks',
+#     'POLYLINE')
 # autocadmap_to_shp(
 #     'C:/Users/ulisesdario/Downloads/S-241E-01-DWG-BAS.dwg',
 #     'C:\Users\ulisesdario\Desktop\scratch', 'A-SPAC-PPLN-AREA')
@@ -291,3 +344,5 @@ build_network(
 #     'C:\Users\ulisesdario\CAD-to-esri-3D-Network\scratch.mxd')
 # mxd.author = "Ulises Guzman"
 # mxd.save()
+# print(os.path.basename(os.getcwd()))
+dwg_file_collector('W:\\')
