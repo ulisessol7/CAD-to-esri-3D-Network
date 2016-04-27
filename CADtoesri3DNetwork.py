@@ -17,11 +17,13 @@ import glob
 import re
 import tempfile
 import inspect
+import repr as reprlib
 from win32com import client
 import arcpy
 import arcpy.na
 from arcpy import env
 import pandas as pd
+import pdb
 
 
 PR_PATH = os.getcwd()
@@ -53,6 +55,8 @@ def path_retriever(directory_name=os.path.basename(os.getcwd())):
     >>> path_retriever('Guzman_lab3')
     Please enter a valid path for Guzman_lab3:
     """
+    # getting the name of the function programatically.
+    print ('Executing {}... '.format(inspect.currentframe().f_code.co_name))
     path = raw_input('Please enter a valid path for'
                      ' %s : ' % directory_name)
     # checking if the information provided by the user is a valid path
@@ -61,28 +65,44 @@ def path_retriever(directory_name=os.path.basename(os.getcwd())):
             'Please enter a valid path for the %s: ' % directory_name)
     return path
 
-'This needs to be tweak'
-def bldgs_dict():
+
+def bldgs_dict(qryAllBldgs_location='qryAllBldgs.xlsx'):
     """
     This function reads the 'qryAllBldgs.xlsx' file and returns
-    a python dictionary in which the keys are the buildings' number
-    and the values are the buildings' code (i.e. {325 : 'MUEN'} ).
+    a python dictionary in which the keys are the buildings' numbers
+    and the values are the buildings' codes (i.e. {325 : 'MUEN'} ).
     This allows to rename files either based on building number or
     building code. The 'qryAllBldgs.xlsx' file was exported from
     the 'LiveCASP_SpaceDatabase.mdb' access file
     ('\\Cotterpin\CASPData\Extract\LiveDatabase').
+    Args:
+    qryAllBldgs_location(string) = The location of the 'qryAllBldgs.xlsx' file.
+
+    Returns:
+    bldgs (dict) = A python dictionary in which the keys are the buildings'
+    numbers and the values are the buildings' codes.
+
+    Examples:
+    >>> bldgs_dict()
+    Executing bldgs_dict...
+    CU Boulder buildings: {u'131': u'ATHN', u'133': u'TB33',...}
     """
-    os.chdir(PATH_qryAllBldgs)
-    bldgs = pd.read_excel('qryAllBldgs.xlsx', header=0, index_col=0).to_dict()
+    # getting the name of the function programatically.
+    print ('Executing {}... '.format(inspect.currentframe().f_code.co_name))
+    bldgs = pd.read_excel(
+        qryAllBldgs_location, header=0, index_col=0).to_dict()
+    # getting building codes.
     bldgs = bldgs['BuildingCode']
-    # print BLDGS
-    return bldgs_dict
+    print('CU Boulder buildings: {}'.format(reprlib.repr(bldgs)))
+    return bldgs
+# bldgs_dict()
 
 
-def dwg_file_collector(location=os.getcwd()):
+def dwg_file_collector(bldgs_dict, location=os.getcwd()):
     """
     ...
     Args:
+    bldgs_dict (func) = A call to the bldgs_dict function.
     location (str) = A string representation of the directory location.
 
     Returns:
@@ -93,18 +113,26 @@ def dwg_file_collector(location=os.getcwd()):
     in the subfolders.
 
     Examples:
-    >>> dwg_file_collector('W:\\')
+    >>> dwg_file_collector(bldgs_dict('...\qryAllBldgs.xlsx'),
+                           '...\CAD-to-esri-3D-Network\\floorplans')
+    Executing bldgs_dict...
+    CU Boulder buildings: {u'131': u'ATHN', u'133': u'TB33', ...}
     Executing dwg_file_collector...
-    1204 dwgs were found in: W:\
+    16 dwgs were found in: .../CAD-to-esri-3D-Network/floorplans/
+    Buildings numbers dictionary: {'338': ['S-338-01-DWG-BAS.dwg',...}
+    Buildings codes dictionary: {u'ADEN': ['S-339-01-DWG-BAS.dwg',...}
     """
     # getting the name of the function programatically.
     print ('Executing {}... '.format(inspect.currentframe().f_code.co_name))
     original_workspace = os.getcwd()
+    # making the path compatible with python.
+    location = location.replace('\\', '/') + '/'
     os.chdir(location)
     folders = [p.replace('\\', '') for p in glob.glob('*/')]
-    # so we can report the how many dwgs were found.
+    # so the number of dwgs that were found can be reported.
     dwg_files = []
     dwg_bldg_number = {}
+    dwg_bldg_code = {}
     for folder in folders:
         folder_path = ''.join([location, folder])
         os.chdir(folder_path)
@@ -114,12 +142,22 @@ def dwg_file_collector(location=os.getcwd()):
         # removes 'ROOF' files from the floorplans' list.
         folder_dwg_files = [dwg for dwg in folder_dwg_files if dwg[-7:] ==
                             'BAS.dwg' and 'ROOF' not in dwg]
+        # dict where the buildings' numbers are the keys.
         dwg_bldg_number[folder] = folder_dwg_files
+        # dict where the buildings' codes are the keys.
+        dwg_bldg_code[bldgs_dict[folder]] = folder_dwg_files
         dwg_files += folder_dwg_files
     os.chdir(original_workspace)
     print ('{} dwgs were found in: {} '.format(
         (len(dwg_files)), location))
-    # print(dwg_bldg_number)
+    print('Buildings numbers dictionary: {}'.format(
+        reprlib.repr(dwg_bldg_number)))
+    print('Buildings codes dictionary: {}'.format(
+        reprlib.repr(dwg_bldg_code)))
+    return dwg_bldg_number, dwg_bldg_code
+dwg_file_collector(
+    bldgs_dict('C:/Users/ulisesdario/CAD-to-esri-3D-Network/qryAllBldgs.xlsx'),
+    'C:\Users\ulisesdario\CAD-to-esri-3D-Network\\floorplans')
 
 
 def cad_layer_name_simplifier(layer_name):
@@ -345,4 +383,4 @@ def build_network(egdb, feature_dataset, feature_type):
 # mxd.author = "Ulises Guzman"
 # mxd.save()
 # print(os.path.basename(os.getcwd()))
-dwg_file_collector('W:\\')
+# dwg_file_collector('W:\\')
