@@ -18,14 +18,15 @@ import re
 import tempfile
 import inspect
 import repr as reprlib
-from win32com import client
+# from win32com import client
 import arcpy
 import arcpy.na
 from arcpy import env
 import pandas as pd
-import pdb
-
-
+# import pdb
+'''
+Google this: Boundlessgeo
+'''
 PR_PATH = os.getcwd()
 # reformatting path strings to have forward slashes, otherwise AutoCAD fails.
 PR_PATH = PR_PATH.replace('\\', '/') + '/'
@@ -95,11 +96,12 @@ def bldgs_dict(qryAllBldgs_location='qryAllBldgs.xlsx'):
     bldgs = bldgs['BuildingCode']
     print('CU Boulder buildings: {}'.format(reprlib.repr(bldgs)))
     return bldgs
-# bldgs_dict()
+
+bldgs_dict('F:/CAD-to-esri-3D-Network/qryAllBldgs.xlsx')
 
 
 def dwg_file_collector(bldgs_dict, location=os.getcwd()):
-    """
+    """  
     ...
     Args:
     bldgs_dict (func) = A call to the bldgs_dict function.
@@ -155,9 +157,9 @@ def dwg_file_collector(bldgs_dict, location=os.getcwd()):
     print('Buildings codes dictionary: {}'.format(
         reprlib.repr(dwg_bldg_code)))
     return dwg_bldg_number, dwg_bldg_code
-dwg_file_collector(
-    bldgs_dict('C:/Users/ulisesdario/CAD-to-esri-3D-Network/qryAllBldgs.xlsx'),
-    'C:\Users\ulisesdario\CAD-to-esri-3D-Network\\floorplans')
+# dwg_file_collector(
+    # bldgs_dict('C:/Users/ulisesdario/CAD-to-esri-3D-Network/qryAllBldgs.xlsx'),
+    # 'C:\Users\ulisesdario\CAD-to-esri-3D-Network\\floorplans')
 
 
 def cad_layer_name_simplifier(layer_name):
