@@ -15,28 +15,28 @@ from __future__ import print_function
 import os
 import glob
 import re
-import tempfile
+import time
+# import tempfile
 import inspect
 import repr as reprlib
-# from win32com import client
+from win32com import client
 import arcpy
 import arcpy.na
 from arcpy import env
 import pandas as pd
 # import pdb
-'''
-Google this: Boundlessgeo
-'''
-PR_PATH = os.getcwd()
-# reformatting path strings to have forward slashes, otherwise AutoCAD fails.
-PR_PATH = PR_PATH.replace('\\', '/') + '/'
-# print(PR_PATH)
-# exploring the possibility of creating a temporary directory for geoprocessing
-# this solution is multiplatform.
-SCRATCH_PATH = tempfile.mkdtemp()
-SCRATCH_PATH = SCRATCH_PATH.replace('\\', '/') + '/'
-# env.scratchWorkspace = 'C:\Users\ulisesdario\Documents\ArcGIS'
-# print(SCRATCH_PATH)
+
+# PR_PATH = os.getcwd()
+# # reformatting path strings to have forward slashes, otherwise AutoCAD fails.
+# PR_PATH = PR_PATH.replace('\\', '/') + '/'
+# # print(PR_PATH)
+# # exploring the possibility of creating a temporary directory for geoprocessing
+# # this solution is multiplatform.
+# SCRATCH_PATH = tempfile.mkdtemp()
+# SCRATCH_PATH = SCRATCH_PATH.replace('\\', '/') + '/'
+# print('Scratch {}'.format(SCRATCH_PATH))
+# # env.scratchWorkspace = 'C:\Users\ulisesdario\Documents\ArcGIS'
+# # print(SCRATCH_PATH)
 temp_gdb = env.scratchGDB
 
 
@@ -97,11 +97,9 @@ def bldgs_dict(qryAllBldgs_location='qryAllBldgs.xlsx'):
     print('CU Boulder buildings: {}'.format(reprlib.repr(bldgs)))
     return bldgs
 
-bldgs_dict('F:/CAD-to-esri-3D-Network/qryAllBldgs.xlsx')
-
 
 def dwg_file_collector(bldgs_dict, location=os.getcwd()):
-    """  
+    """
     ...
     Args:
     bldgs_dict (func) = A call to the bldgs_dict function.
@@ -142,8 +140,11 @@ def dwg_file_collector(bldgs_dict, location=os.getcwd()):
         # our current dwg naming convention is as follows:
         # 'bldg_number-floor_number-DWG-drawing_type (i.e.'325-01-DWG-BAS.dwg')
         # removes 'ROOF' files from the floorplans' list.
-        folder_dwg_files = [dwg for dwg in folder_dwg_files if dwg[-7:] ==
-                            'BAS.dwg' and 'ROOF' not in dwg]
+        for i, dwg in enumerate(folder_dwg_files):
+            if dwg[-7:] == 'BAS.dwg' and 'ROOF' not in dwg:
+                folder_dwg_files[i] = '/'.join([folder_path, dwg])
+            else:
+                folder_dwg_files.remove(dwg)
         # dict where the buildings' numbers are the keys.
         dwg_bldg_number[folder] = folder_dwg_files
         # dict where the buildings' codes are the keys.
@@ -157,9 +158,6 @@ def dwg_file_collector(bldgs_dict, location=os.getcwd()):
     print('Buildings codes dictionary: {}'.format(
         reprlib.repr(dwg_bldg_code)))
     return dwg_bldg_number, dwg_bldg_code
-# dwg_file_collector(
-    # bldgs_dict('C:/Users/ulisesdario/CAD-to-esri-3D-Network/qryAllBldgs.xlsx'),
-    # 'C:\Users\ulisesdario\CAD-to-esri-3D-Network\\floorplans')
 
 
 def cad_layer_name_simplifier(layer_name):
@@ -183,7 +181,7 @@ def cad_layer_name_simplifier(layer_name):
     return simple_layer_name
 
 
-def autocadmap_to_shp(floor_plan, out_loc, layer_on):
+def autocadmap_to_shp(floor_plan, out_loc, layer_on, map_exp_set):
     """This function transforms AutoCAD Map files into shapefiles, this function
     was developed as an alternative to the current workflows proposed by esri:
     http://desktop.arcgis.com/en/arcmap/10.3/tools/conversion-toolbox/
@@ -195,6 +193,8 @@ def autocadmap_to_shp(floor_plan, out_loc, layer_on):
     floor_plan (str) = The dwg file full path.
     layer_on (str) = The AutoCAD layer that is meant to be set 'ON'.
     out_loc (str) = A string representation of the output location.
+    map_exp_set (str) = A string representation of the map export settings
+    location.
 
     Returns:
     A shapefile based on the provided floor plan. This will only contain
@@ -204,7 +204,7 @@ def autocadmap_to_shp(floor_plan, out_loc, layer_on):
     Examples:
     >>> autocadmap_to_shp(
     'C:/Users/ulisesdario/S-241E-01-DWG-BAS.dwg', 'C:/Users/ulisesdario',
-    'A-SPAC-PPLN-AREA')
+    'A-SPAC-PPLN-AREA', 'G:/CAD-to-esri-3D-Network/mapexportsettings.epf')
     Executing autocadmap_to_shp...
     C:/Users/ulisesdario/S-241E-01-DWG-BAS-AREA.shp has been successfully
     created
@@ -234,14 +234,14 @@ def autocadmap_to_shp(floor_plan, out_loc, layer_on):
     out_name = '{0}{1}-{2}.shp'.format(out_loc,
                                        os.path.basename(floor_plan)[:-4],
                                        sl_name)
-    ex_set = PR_PATH + 'mapexportsettings.epf'
+    ex_set = map_exp_set.replace('\\','/')
     pr = 'PROCEED'
     ex_command = '(command "{0}" "SHP" "{1}" "Y" "{2}"' \
                  ' "{3}")'.format(mp, out_name, ex_set, pr)
     doc.SendCommand('%s\n' % ex_command)
     doc.SendCommand("(ACAD-POP-DBMOD)\n")
-    # doc.SendCommand("QQUIT\n")
-    doc.Close(True)
+    # this line avoids the 'Call was Rejected By Callee' Error.
+    time.sleep(2)
     print('{} has been successfully created'.format(out_name))
     return
 
@@ -386,3 +386,16 @@ def build_network(egdb, feature_dataset, feature_type):
 # mxd.save()
 # print(os.path.basename(os.getcwd()))
 # dwg_file_collector('W:\\')
+if __name__ == '__main__':
+    dwgs_dict = dwg_file_collector(
+        bldgs_dict(
+            'G:\\CAD-to-esri-3D-Network\\qryAllBldgs.xlsx'),
+        'G:\\CAD-to-esri-3D-Network\\floorplans')[0]
+    for k, v in dwgs_dict.iteritems():
+        for floorplan in v:
+            autocadmap_to_shp(floorplan,
+                'G:\CAD-to-esri-3D-Network\shapefiles', 'A-SPAC-PPLN-AREA',
+                'G:\CAD-to-esri-3D-Network\mapexportsettings.epf')
+    shapefiles = shp_files_reader('G:\CAD-to-esri-3D-Network\shapefiles')[1]
+    shp_to_fc(shapefiles)
+    arcpy.Delete_management('in_memory')
