@@ -20,23 +20,26 @@ import time
 import inspect
 import repr as reprlib
 from win32com import client
+import pandas as pd
 import arcpy
 import arcpy.na
 from arcpy import env
-import pandas as pd
+env.overwriteOutput = True
+env.qualifiedFieldNames = "UNQUALIFIED"
+
 # import pdb
 
 # PR_PATH = os.getcwd()
-# # reformatting path strings to have forward slashes, otherwise AutoCAD fails.
+# reformatting path strings to have forward slashes, otherwise AutoCAD fails.
 # PR_PATH = PR_PATH.replace('\\', '/') + '/'
-# # print(PR_PATH)
-# # exploring the possibility of creating a temporary directory for geoprocessing
-# # this solution is multiplatform.
+# print(PR_PATH)
+# exploring the possibility of creating a temporary directory for geoprocessing
+# this solution is multiplatform.
 # SCRATCH_PATH = tempfile.mkdtemp()
 # SCRATCH_PATH = SCRATCH_PATH.replace('\\', '/') + '/'
 # print('Scratch {}'.format(SCRATCH_PATH))
-# # env.scratchWorkspace = 'C:\Users\ulisesdario\Documents\ArcGIS'
-# # print(SCRATCH_PATH)
+# env.scratchWorkspace = 'C:\Users\ulisesdario\Documents\ArcGIS'
+# print(SCRATCH_PATH)
 temp_gdb = env.scratchGDB
 
 
@@ -234,7 +237,7 @@ def autocadmap_to_shp(floor_plan, out_loc, layer_on, map_exp_set):
     out_name = '{0}{1}-{2}.shp'.format(out_loc,
                                        os.path.basename(floor_plan)[:-4],
                                        sl_name)
-    ex_set = map_exp_set.replace('\\','/')
+    ex_set = map_exp_set.replace('\\', '/')
     pr = 'PROCEED'
     ex_command = '(command "{0}" "SHP" "{1}" "Y" "{2}"' \
                  ' "{3}")'.format(mp, out_name, ex_set, pr)
@@ -322,26 +325,83 @@ def skeletonizer(floor_plans_fc, out_location, workspace=env.workspace):
         # getting the name of the function programatically.
         print ('Executing {}... '.format(
             inspect.currentframe().f_code.co_name))
-        # string manipulation
-        skeleton_name = [floor_plans_fc[:] for floor_plan in floor_plans_fc]
-        print(skeleton_name)
         # logic to create skeletons as feature classes
+        skeletons = 'Medial axis algorithm'
+    except Exception as e:
+        print(e)
+    return skeletons
 
-    except arcpy.ExecuteError:
-        print (arcpy.GetMessages(2))
 
-
-def build_network(egdb, feature_dataset, feature_type):
+def build_network(egdb, skeletons_list, network_skel_source, network):
     """It keeps the master network up to date by re-building its source
     features.The master network and its source features will be assumed to live
     in an enterprise geodatabase created on PostgreSQL 9.3.
     """
     # 'Database Connections' points to the default location
-    network_ws = 'Database Connections\\{}\\{}'.format(egdb, feature_dataset)
+    arcpy.CheckOutExtension('Network')
+    network_ws = 'Database Connections\\{}'.format(egdb)
     env.workspace = network_ws
-    print(network_ws)
-    fc_list = arcpy.ListFeatureClasses('*', '%s' % feature_type)
-    print(fc_list)
+    skeletons_list = arcpy.ListFeatureClasses('*CENT')
+    network_fields = {'NAME': 'TEXT', 'SPEED': 'FLOAT',
+                      'MINUTES': 'DOUBLE', 'SECONDS': 'DOUBLE',
+                      'ELEVATION': 'DOUBLE'}
+    # this is only being used as a proof of concept
+    floor_heights = {'01': 0, '02': 10}
+    for skeleton in skeletons_list:
+        # network_scratch.ulisessol7.S_338_01_DWG_BAS_CENT
+        match = re.search('_(\d){2}_', skeleton)
+        skeleton_floor = match.group()[1:-1]
+        # getting field names
+        field_names = [f.name for f in arcpy.ListFields(skeleton)]
+        for field in network_fields:
+            if field.lower() not in field_names:
+                try:
+                    arcpy.AddField_management(
+                        skeleton, field, network_fields[field])
+                except arcpy.ExecuteError:
+                    print (arcpy.GetMessages(2))
+    # to get a list of fields for the cursor object
+    # map is slightly slower than a list comprehension
+    # cursor_fields = [f.name for f in arcpy.ListFields(skeleton)]
+    # ['SHAPE@LENGTH', 'elevation', 'minutes', 'name', 'seconds', 'speed']
+        cursor_fields = sorted(
+            ['SHAPE@LENGTH'] + map(str.lower, network_fields.keys()))
+        # print(cursor_fields)
+        with arcpy.da.UpdateCursor(skeleton, cursor_fields) as cursor:
+            for row in cursor:
+                # updating the 'SPEED' field, the speed is expressed in fps
+                row[5] = 4.11
+                # updating the 'NAME' field
+                row[3] = 'Placeholder'
+                # updating the 'MINUTES' field
+                row[2] = row[0] / (row[4] * 60)
+                # updating the 'SECONDS' field
+                row[4] = row[0] / row[4]
+                # updating the 'ELEVATION' field
+                row[1] = floor_heights[skeleton_floor]
+                cursor.updateRow(row)
+    merge_candidates = skeletons_list
+    # [arcpy.RegisterAsVersioned_management(sk) for sk in skeletons_list]
+    arcpy.Append_management(merge_candidates, network_skel_source, 'NO_TEST')
+    arcpy.BuildNetwork_na(network)
+    return
+
+build_network(
+    'master_network.sde', '', 'network_scratch.ulisessol7.pedestrian',
+    'network_scratch.ulisessol7.pedestrian')
+
+
+# def build_network(egdb, feature_dataset, feature_type):
+#     """It keeps the master network up to date by re-building its source
+#     features.The master network and its source features will be assumed to live
+#     in an enterprise geodatabase created on PostgreSQL 9.3.
+#     """
+# 'Database Connections' points to the default location
+#     network_ws = 'Database Connections\\{}\\{}'.format(egdb, feature_dataset)
+#     env.workspace = network_ws
+#     print(network_ws)
+#     fc_list = arcpy.ListFeatureClasses('*', '%s' % feature_type)
+#     print(fc_list)
 
     # esri code, for debugging purposes
     # for environment in environments:
@@ -353,7 +413,7 @@ def build_network(egdb, feature_dataset, feature_type):
     # Format and print each environment and its current setting
     #     #
     #     print("{0:<30}: {1}".format(environment, env_value))
-    return
+    # return
 
 
 # tests
@@ -386,16 +446,16 @@ def build_network(egdb, feature_dataset, feature_type):
 # mxd.save()
 # print(os.path.basename(os.getcwd()))
 # dwg_file_collector('W:\\')
-if __name__ == '__main__':
-    dwgs_dict = dwg_file_collector(
-        bldgs_dict(
-            'G:\\CAD-to-esri-3D-Network\\qryAllBldgs.xlsx'),
-        'G:\\CAD-to-esri-3D-Network\\floorplans')[0]
-    for k, v in dwgs_dict.iteritems():
-        for floorplan in v:
-            autocadmap_to_shp(floorplan,
-                'G:\CAD-to-esri-3D-Network\shapefiles', 'A-SPAC-PPLN-AREA',
-                'G:\CAD-to-esri-3D-Network\mapexportsettings.epf')
-    shapefiles = shp_files_reader('G:\CAD-to-esri-3D-Network\shapefiles')[1]
-    shp_to_fc(shapefiles)
-    arcpy.Delete_management('in_memory')
+# if __name__ == '__main__':
+#     dwgs_dict = dwg_file_collector(
+#         bldgs_dict(
+#             'G:\\CAD-to-esri-3D-Network\\qryAllBldgs.xlsx'),
+#         'G:\\CAD-to-esri-3D-Network\\floorplans')[0]
+#     for k, v in dwgs_dict.iteritems():
+#         for floorplan in v:
+#             autocadmap_to_shp(floorplan,
+#                               'G:\CAD-to-esri-3D-Network\shapefiles', 'A-SPAC-PPLN-AREA',
+#                               'G:\CAD-to-esri-3D-Network\mapexportsettings.epf')
+#     shapefiles = shp_files_reader('G:\CAD-to-esri-3D-Network\shapefiles')[1]
+#     shp_to_fc(shapefiles)
+#     arcpy.Delete_management('in_memory')
