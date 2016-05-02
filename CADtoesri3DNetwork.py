@@ -2,13 +2,28 @@
 """
 Name:       CADtoesri3DNetwork.py
 Author:     Ulises  Guzman
-Created:    04/07/2016
+Created:    05/04/2016
 Copyright:   (c)
 ArcGIS Version:   10.3.1
-AutoCAD Version:  20.1
 Python Version:   2.7.8
 --------------------------------------------------------------------------------
-This script...
+This script outlines a possible workflow for the creation of a pedestrian
+indoor & outdoor 3D Network for The University of Colorado at Boulder.
+The logic is as follows:
+* Gather buildings' information (building codes & numbers) from excel file
+(that's how this information is currently storage).
+* Read & filter dwg files (buildings floorplans).
+* Create esri feature classes by automating AutoCAD Map.
+* Create skeletons for each floorplan (A work in progress).
+* Populate skeletons with the relevant attributes and transform them into 3D
+feature classes.
+*Finally update the network by invoking the 'build method'.
+*Run centrality analysis to test the network topology.
+
+The latter requires the creation of a 3D Network inside an Enterprise
+Geodatabase in advance because,unfortunately,arcpy does not currently provide
+a method to create a network dataset from scratch. For this example, the EGDB
+was created on PostgreSQL.
 --------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -40,34 +55,7 @@ env.qualifiedFieldNames = "UNQUALIFIED"
 # print('Scratch {}'.format(SCRATCH_PATH))
 # env.scratchWorkspace = 'C:\Users\ulisesdario\Documents\ArcGIS'
 # print(SCRATCH_PATH)
-temp_gdb = env.scratchGDB
-
-
-def path_retriever(directory_name=os.path.basename(os.getcwd())):
-    """ This helper function prompts the user for a folder or a gdb name,
-    the string will then be use to construct a valid path string.
-
-    Args:
-    directory_name(string) = The name of the folder or the gdb that contains
-    the data.
-
-    Returns:
-    path (string) = A string representation of the folder,or geodatabase,
-    location.
-
-    Examples:
-    >>> path_retriever('Guzman_lab3')
-    Please enter a valid path for Guzman_lab3:
-    """
-    # getting the name of the function programatically.
-    print ('Executing {}... '.format(inspect.currentframe().f_code.co_name))
-    path = raw_input('Please enter a valid path for'
-                     ' %s : ' % directory_name)
-    # checking if the information provided by the user is a valid path
-    while not (os.path.exists(path) and path.endswith('%s' % directory_name)):
-        path = raw_input(
-            'Please enter a valid path for the %s: ' % directory_name)
-    return path
+# temp_gdb = env.scratchGDB
 
 
 def bldgs_dict(qryAllBldgs_location='qryAllBldgs.xlsx'):
@@ -319,7 +307,7 @@ def shp_to_fc(shapefiles, out_gdb_location='in_memory'):
 
 
 def skeletonizer(floor_plans_fc, out_location, workspace=env.workspace):
-    """Medial Axis
+    """Medial Axis, a work in progress.
     """
     try:
         # getting the name of the function programatically.
@@ -337,24 +325,25 @@ def build_network(egdb, skeletons_list, network_skel_source, network):
     features.The master network and its source features will be assumed to live
     in an enterprise geodatabase created on PostgreSQL 9.3.
     """
-    # 'Database Connections' points to the default location
     arcpy.CheckOutExtension('Network')
+    # 'Database Connections' points to the default location
     network_ws = 'Database Connections\\{}'.format(egdb)
     env.workspace = network_ws
     skeletons_list = arcpy.ListFeatureClasses('*CENT')
-    network_fields = {'NAME': 'TEXT', 'SPEED': 'FLOAT',
-                      'MINUTES': 'DOUBLE', 'SECONDS': 'DOUBLE',
-                      'ELEVATION': 'DOUBLE'}
+    network_fields = {'name': 'TEXT', 'speed': 'FLOAT',
+                      'minutes': 'DOUBLE', 'seconds': 'DOUBLE',
+                      'elevation': 'SHORT'}
     # this is only being used as a proof of concept
     floor_heights = {'01': 0, '02': 10}
     for skeleton in skeletons_list:
         # network_scratch.ulisessol7.S_338_01_DWG_BAS_CENT
+        # getting floor number.
         match = re.search('_(\d){2}_', skeleton)
         skeleton_floor = match.group()[1:-1]
         # getting field names
         field_names = [f.name for f in arcpy.ListFields(skeleton)]
         for field in network_fields:
-            if field.lower() not in field_names:
+            if field not in field_names:
                 try:
                     arcpy.AddField_management(
                         skeleton, field, network_fields[field])
@@ -374,78 +363,29 @@ def build_network(egdb, skeletons_list, network_skel_source, network):
                 # updating the 'NAME' field
                 row[3] = 'Placeholder'
                 # updating the 'MINUTES' field
-                row[2] = row[0] / (row[4] * 60)
+                row[2] = row[0] / (row[5] * 60)
                 # updating the 'SECONDS' field
-                row[4] = row[0] / row[4]
+                row[4] = row[0] / row[5]
                 # updating the 'ELEVATION' field
                 row[1] = floor_heights[skeleton_floor]
                 cursor.updateRow(row)
-    merge_candidates = skeletons_list
+        arcpy.CheckOutExtension('3D')
+        arcpy.FeatureTo3DByAttribute_3d(skeleton, skeleton + '3D', 'ELEVATION')
+    merge_candidates = arcpy.ListFeatureClasses('*3D')
     # [arcpy.RegisterAsVersioned_management(sk) for sk in skeletons_list]
     arcpy.Append_management(merge_candidates, network_skel_source, 'NO_TEST')
     arcpy.BuildNetwork_na(network)
     return
 
 build_network(
-    'master_network.sde', '', 'network_scratch.ulisessol7.pedestrian',
-    'network_scratch.ulisessol7.pedestrian')
+    'master_network.sde', '', 'network_scratch.ulisessol7.pedestrian3D',
+    'network_scratch.ulisessol7.CU_Boulder_Network')
 
 
-# def build_network(egdb, feature_dataset, feature_type):
-#     """It keeps the master network up to date by re-building its source
-#     features.The master network and its source features will be assumed to live
-#     in an enterprise geodatabase created on PostgreSQL 9.3.
-#     """
-# 'Database Connections' points to the default location
-#     network_ws = 'Database Connections\\{}\\{}'.format(egdb, feature_dataset)
-#     env.workspace = network_ws
-#     print(network_ws)
-#     fc_list = arcpy.ListFeatureClasses('*', '%s' % feature_type)
-#     print(fc_list)
+def centrality_calculator():
+    """
+    """
 
-    # esri code, for debugging purposes
-    # for environment in environments:
-    # As the environment is passed as a variable, use Python's getattr
-    # to evaluate the environment's value
-    #     #
-    #     env_value = getattr(arcpy.env, environment)
-
-    # Format and print each environment and its current setting
-    #     #
-    #     print("{0:<30}: {1}".format(environment, env_value))
-    # return
-
-
-# tests
-# build_network(
-#     'master_network.sde', 'network_scratch.ulisessol7.CU_Boulder_Networks',
-#     'POLYLINE')
-# autocadmap_to_shp(
-#     'C:/Users/ulisesdario/Downloads/S-241E-01-DWG-BAS.dwg',
-#     'C:\Users\ulisesdario\Desktop\scratch', 'A-SPAC-PPLN-AREA')
-# cad_layer_name_simplifier('A-SPAC-PPLN-AREA')
-# shp_files_reader('C:\Users\ulisesdario\Desktop\scratch')
-# env.workspace = 'C:\Users\ulisesdario\Desktop\scratch'
-# environments = arcpy.ListEnvironments()
-# for environment in environments:
-#     envSetting = eval("arcpy.env." + environment)
-#     print ("%-30s: %s" % (environment, envSetting))
-# arcpy.ResetEnvironments()
-# environments = arcpy.ListEnvironments()
-# for environment in environments:
-#     envSetting = eval("arcpy.env." + environment)
-#     print ("%-30s: %s" % (environment, envSetting))
-
-# s = shp_files_reader('C:\Users\ulisesdario\Desktop\scratch')[1]
-# shp_to_fc(s, 'C:\Users\ulisesdario\Documents\ArcGIS\Default.gdb')
-
-
-# mxd = arcpy.mapping.MapDocument(
-#     'C:\Users\ulisesdario\CAD-to-esri-3D-Network\scratch.mxd')
-# mxd.author = "Ulises Guzman"
-# mxd.save()
-# print(os.path.basename(os.getcwd()))
-# dwg_file_collector('W:\\')
 # if __name__ == '__main__':
 #     dwgs_dict = dwg_file_collector(
 #         bldgs_dict(
@@ -453,9 +393,15 @@ build_network(
 #         'G:\\CAD-to-esri-3D-Network\\floorplans')[0]
 #     for k, v in dwgs_dict.iteritems():
 #         for floorplan in v:
+#             # this will create the network locations.
 #             autocadmap_to_shp(floorplan,
-#                               'G:\CAD-to-esri-3D-Network\shapefiles', 'A-SPAC-PPLN-AREA',
-#                               'G:\CAD-to-esri-3D-Network\mapexportsettings.epf')
+#                               'G:\CAD-to-esri-3D-Network\shapefiles',
+#                               'A-SPAC-PPLN-AREA',
+#                               'G:\CAD-to-esri-3D-Network\mapexportsettings.epf'
+#                               )
 #     shapefiles = shp_files_reader('G:\CAD-to-esri-3D-Network\shapefiles')[1]
-#     shp_to_fc(shapefiles)
+#     shp_to_fc(shapefiles, 'master_network.sde')
+#     build_network(
+#         'master_network.sde', '', 'network_scratch.ulisessol7.pedestrian3D',
+#         'network_scratch.ulisessol7.CU_Boulder_Network')
 #     arcpy.Delete_management('in_memory')
