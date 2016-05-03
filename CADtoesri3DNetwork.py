@@ -320,16 +320,16 @@ def skeletonizer(floor_plans_fc, out_location, workspace=env.workspace):
     return skeletons
 
 
-def build_network(egdb, skeletons_list, network_skel_source, network):
+def build_network(egdb, skeletons_list, network_skel_source, network, type):
     """It keeps the master network up to date by re-building its source
     features.The master network and its source features will be assumed to live
     in an enterprise geodatabase created on PostgreSQL 9.3.
     """
-    arcpy.CheckOutExtension('Network')
-    # 'Database Connections' points to the default location
-    network_ws = 'Database Connections\\{}'.format(egdb)
-    env.workspace = network_ws
-    skeletons_list = arcpy.ListFeatureClasses('*CENT')
+    # getting the name of the function programatically.
+    print ('Executing {}... '.format(
+        inspect.currentframe().f_code.co_name))
+    env.workspace = egdb
+    skeletons_list = arcpy.ListFeatureClasses("*{}".format(type))
     network_fields = {'name': 'TEXT', 'speed': 'FLOAT',
                       'minutes': 'DOUBLE', 'seconds': 'DOUBLE',
                       'elevation': 'SHORT'}
@@ -350,12 +350,12 @@ def build_network(egdb, skeletons_list, network_skel_source, network):
                 except arcpy.ExecuteError:
                     print (arcpy.GetMessages(2))
     # to get a list of fields for the cursor object
-    # map is slightly slower than a list comprehension
-    # cursor_fields = [f.name for f in arcpy.ListFields(skeleton)]
-    # ['SHAPE@LENGTH', 'elevation', 'minutes', 'name', 'seconds', 'speed']
+    # map is slightly slower than a list comprehension, but clearer in this
+    # particular case.
         cursor_fields = sorted(
             ['SHAPE@LENGTH'] + map(str.lower, network_fields.keys()))
         # print(cursor_fields)
+        # ['SHAPE@LENGTH', 'elevation', 'minutes', 'name', 'seconds', 'speed']
         with arcpy.da.UpdateCursor(skeleton, cursor_fields) as cursor:
             for row in cursor:
                 # updating the 'SPEED' field, the speed is expressed in fps
@@ -370,38 +370,64 @@ def build_network(egdb, skeletons_list, network_skel_source, network):
                 row[1] = floor_heights[skeleton_floor]
                 cursor.updateRow(row)
         arcpy.CheckOutExtension('3D')
-        arcpy.FeatureTo3DByAttribute_3d(skeleton, skeleton + '3D', 'ELEVATION')
-    merge_candidates = arcpy.ListFeatureClasses('*3D')
+        arcpy.CheckOutExtension('Network')
+        # utilizing 'in_memory' workspace for faster performance.
+        output_3d = 'in_memory' + '\\' + skeleton + '_3D'
+        # important step, only 3D polylines can be connected in the Z dimension
+        # in ArcScene
+        arcpy.FeatureTo3DByAttribute_3d(skeleton, output_3d, 'ELEVATION')
+    env.workspace = 'in_memory'
+    append_candidates = arcpy.ListFeatureClasses('*_3D')
     # [arcpy.RegisterAsVersioned_management(sk) for sk in skeletons_list]
-    arcpy.Append_management(merge_candidates, network_skel_source, 'NO_TEST')
+    # the network , and its sources, must be register as versioned beforehand,
+    # the append candidates, on the other hand  must not.
+    arcpy.Append_management(
+        append_candidates, network_skel_source, 'NO_TEST')
+    # not working properly, sometimes it does not re-build the network.
     arcpy.BuildNetwork_na(network)
+    # cleanning up the 'in_memory' workspace.
+    arcpy.Delete_management('in_memory')
+    arcpy.CheckInExtension('3D')
+    arcpy.CheckInExtension('Network')
     return
 
-build_network(
-    'master_network.sde', '', 'network_scratch.ulisessol7.pedestrian3D',
-    'network_scratch.ulisessol7.CU_Boulder_Network')
+# build_network(
+#     'master_network.sde', '', 'network_scratch.ulisessol7.pedestrian3D',
+#     'network_scratch.ulisessol7.CU_Boulder_Network')
 
 
 def centrality_calculator():
     """
     """
 
-# if __name__ == '__main__':
-#     dwgs_dict = dwg_file_collector(
-#         bldgs_dict(
-#             'G:\\CAD-to-esri-3D-Network\\qryAllBldgs.xlsx'),
-#         'G:\\CAD-to-esri-3D-Network\\floorplans')[0]
-#     for k, v in dwgs_dict.iteritems():
-#         for floorplan in v:
-#             # this will create the network locations.
-#             autocadmap_to_shp(floorplan,
-#                               'G:\CAD-to-esri-3D-Network\shapefiles',
-#                               'A-SPAC-PPLN-AREA',
-#                               'G:\CAD-to-esri-3D-Network\mapexportsettings.epf'
-#                               )
-#     shapefiles = shp_files_reader('G:\CAD-to-esri-3D-Network\shapefiles')[1]
-#     shp_to_fc(shapefiles, 'master_network.sde')
-#     build_network(
-#         'master_network.sde', '', 'network_scratch.ulisessol7.pedestrian3D',
-#         'network_scratch.ulisessol7.CU_Boulder_Network')
-#     arcpy.Delete_management('in_memory')
+if __name__ == '__main__':
+    bldgs_excel_path = 'G:\\CAD-to-esri-3D-Network\\qryAllBldgs.xlsx'
+    floorplans_dir = 'G:\\CAD-to-esri-3D-Network\\floorplans'
+    dwgs_dict = dwg_file_collector(bldgs_dict(bldgs_excel_path),
+                                   floorplans_dir)[0]
+    shapefiles_dir = 'G:\CAD-to-esri-3D-Network\shapefiles'
+    network_loc_layer = 'A-SPAC-PPLN-AREA'
+    network_skel_layer = 'A-CENT'
+    autocad_exp_settings = 'G:\CAD-to-esri-3D-Network\mapexportsettings.epf'
+    egdb = 'Database Connections\\master_network.sde'
+    network_3d = egdb + '\\' + 'network_scratch.ulisessol7.CU_Boulder_Network'
+    network_links_source = egdb + '\\' + \
+        'network_scratch.ulisessol7.pedestrian3D'
+    network_locs_source = egdb + '\\' + \
+        'network_scratch.ulisessol7.location_3D'
+    for k, v in dwgs_dict.iteritems():
+        for floorplan in v:
+            if ('338-01' in floorplan) or ('338-02' in floorplan):
+                # this will create the network locations.
+                # autocadmap_to_shp(floorplan, shapefiles_dir, network_loc_layer,
+                #                   autocad_exp_settings)
+                # the skeletons were created manually in AutoCAD MAp :(
+                autocadmap_to_shp(floorplan, shapefiles_dir,
+                                  network_skel_layer, autocad_exp_settings)
+                shapefiles = shp_files_reader(shapefiles_dir)[1]
+                shp_to_fc(shapefiles, egdb)
+                # processing skeletons
+                build_network(
+                    egdb, '', network_links_source, network_3d, 'CENT')
+            else:
+                print('not processed: {}'.format(floorplan))
