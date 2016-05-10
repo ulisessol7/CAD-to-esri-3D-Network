@@ -31,7 +31,6 @@ import os
 import glob
 import re
 import time
-# import tempfile
 import inspect
 import repr as reprlib
 from win32com import client
@@ -41,21 +40,6 @@ import arcpy.na
 from arcpy import env
 env.overwriteOutput = True
 env.qualifiedFieldNames = "UNQUALIFIED"
-
-# import pdb
-
-# PR_PATH = os.getcwd()
-# reformatting path strings to have forward slashes, otherwise AutoCAD fails.
-# PR_PATH = PR_PATH.replace('\\', '/') + '/'
-# print(PR_PATH)
-# exploring the possibility of creating a temporary directory for geoprocessing
-# this solution is multiplatform.
-# SCRATCH_PATH = tempfile.mkdtemp()
-# SCRATCH_PATH = SCRATCH_PATH.replace('\\', '/') + '/'
-# print('Scratch {}'.format(SCRATCH_PATH))
-# env.scratchWorkspace = 'C:\Users\ulisesdario\Documents\ArcGIS'
-# print(SCRATCH_PATH)
-# temp_gdb = env.scratchGDB
 
 
 def bldgs_dict(qryAllBldgs_location='qryAllBldgs.xlsx'):
@@ -398,7 +382,10 @@ def build_network(egdb, skeletons_list, network_skel_source, network, type):
 
 def centrality_calculator():
     """
+    Urban network analyst toolbox
     """
+    try:
+
 
 if __name__ == '__main__':
     bldgs_excel_path = 'G:\\CAD-to-esri-3D-Network\\qryAllBldgs.xlsx'
